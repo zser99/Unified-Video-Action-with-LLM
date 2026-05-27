@@ -8,6 +8,15 @@ import torch
 import threading
 
 
+def _prepare_module_state_dict(state_dict):
+    """Drop HF keys that differ across transformers versions (e.g. CLIP position_ids)."""
+    return {
+        k: v
+        for k, v in state_dict.items()
+        if not k.endswith("position_ids")
+    }
+
+
 class BaseWorkspace:
     include_keys = tuple()
     exclude_keys = tuple()
@@ -103,7 +112,15 @@ class BaseWorkspace:
                     if key == "optimizer" and "base_optimizer_state" in value_new:
                         # value_new = value_new["base_optimizer_state"]
                         continue  # HACK: optimizer state is not compatible with multi-node training. Should use accelerate.load_state
-                    self.__dict__[key].load_state_dict(value_new, **kwargs)
+                    load_kwargs = dict(kwargs)
+                    if key in ("model", "ema_model"):
+                        value_new = _prepare_module_state_dict(value_new)
+                        strict = load_kwargs.pop("strict", False)
+                    else:
+                        strict = load_kwargs.pop("strict", True)
+                    self.__dict__[key].load_state_dict(
+                        value_new, strict=strict, **load_kwargs
+                    )
                 except Exception as e:
                     print(f"{key=}, {value_new.keys()=}, {value_new=}, {kwargs=}")
                     raise e
@@ -117,7 +134,12 @@ class BaseWorkspace:
                     value_new[k.replace("module.", "")] = value[k]
                 else:
                     value_new[k] = value[k]
-            self.__dict__["model"].load_state_dict(value_new, **kwargs)
+            load_kwargs = dict(kwargs)
+            value_new = _prepare_module_state_dict(value_new)
+            strict = load_kwargs.pop("strict", False)
+            self.__dict__["model"].load_state_dict(
+                value_new, strict=strict, **load_kwargs
+            )
 
         for key in include_keys:
             if key in payload["pickles"]:

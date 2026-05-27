@@ -32,10 +32,38 @@ import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.obs_utils as ObsUtils
 
 
-current_dir = os.getcwd()
-parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
-libero_path = os.path.join(parent_dir, "LIBERO")
-sys.path.append(libero_path)
+def _mujoco_py_shim():
+    """Colab Py3.12 + mujoco 3.x: LIBERO/robomimic may still import mujoco_py."""
+    try:
+        import mujoco_py  # noqa: F401
+        return
+    except ImportError:
+        pass
+    import mujoco
+
+    sys.modules["mujoco_py"] = mujoco
+
+
+def _ensure_libero_on_path():
+    candidates = [
+        os.environ.get("LIBERO_PATH"),
+        "/content/LIBERO",
+        os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "LIBERO")
+        ),
+        os.path.abspath(os.path.join(os.getcwd(), "..", "LIBERO")),
+    ]
+    for path in candidates:
+        if path and os.path.isdir(path) and path not in sys.path:
+            sys.path.insert(0, path)
+            return path
+    raise ImportError(
+        "LIBERO repo not found. Clone to /content/LIBERO or set LIBERO_PATH."
+    )
+
+
+_mujoco_py_shim()
+_ensure_libero_on_path()
 from libero.libero.envs.bddl_base_domain import TASK_MAPPING
 
 
@@ -241,7 +269,14 @@ class LiberoImageRunner(BaseImageRunner):
             env_prefixs.append("test/%s_" % env_meta["bddl_file"].split("/")[-1][:-5])
             env_init_fn_dills.append(dill.dumps(init_fn))
 
-        env = AsyncVectorEnv(env_fns, dummy_env_fn=dummy_env_fn, shared_memory=False)
+        # Colab/Jupyter: fork + threaded parent often kills MuJoCo workers (ConnectionResetError).
+        _mp_context = "spawn" if os.path.isdir("/content") else None
+        env = AsyncVectorEnv(
+            env_fns,
+            dummy_env_fn=dummy_env_fn,
+            shared_memory=False,
+            context=_mp_context,
+        )
 
         self.env_meta = env_meta
         self.env = env
