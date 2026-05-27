@@ -37,7 +37,11 @@ def main(checkpoint, output_dir, device):
 
     with open_dict(cfg):
         cfg.output_dir = output_dir
-        
+        if os.environ.get("UVA_LOW_MEMORY", "").lower() in ("1", "true", "yes"):
+            cfg.task.env_runner.n_train = 2
+            cfg.task.env_runner.n_test = 4
+            cfg.task.env_runner.n_envs = 1
+
     # configure workspace
     cls = hydra.utils.get_class(cfg.model._target_)
     workspace = cls(cfg, output_dir=output_dir)

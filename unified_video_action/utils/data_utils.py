@@ -10,6 +10,13 @@ from einops import rearrange
 import PIL
 from itertools import combinations_with_replacement
 
+"""데이터 전처리 유틸리티 모음.
+
+이 모듈은 dataloader 출력과 MAR 정책/모델 입력 사이의 연결 레이어다.
+지원 태스크(libero, umi, toolhang 등)마다 관측 키 구조가 다르기 때문에,
+함수 대부분이 태스크 의존 분기 로직을 포함한다.
+"""
+
 
 array = list(range(16))
 combinations = list(combinations_with_replacement(array, 4))
@@ -17,6 +24,7 @@ combinations = [tem for tem in combinations if tem[-1] == 15]
 
 
 def resize_image(cfg, x):
+    """태스크별 카메라 키를 `obs.image` 중심 포맷으로 통일하고 256으로 리사이즈한다."""
     resize = 256
     if "libero" in cfg.task.name:
         B, T, C, H, W = x["obs"]["agentview_rgb"].shape
@@ -84,6 +92,7 @@ def resize_image(cfg, x):
 
 
 def resize_image_eval(task_name, obs_dict):
+    """추론 시점 관측 딕셔너리에 대해 `resize_image`와 동일한 키 정규화를 수행한다."""
     if "libero" in task_name:
         if "agentview_image" in obs_dict:
             obs_dict["image"] = obs_dict["agentview_image"]
@@ -126,18 +135,26 @@ def resize_image_eval(task_name, obs_dict):
 
 
 def decode_from_sample(vae_model, z):
+    """학습 경로에서 사용하는 VAE 래퍼 API로 latent를 복원한다."""
     with torch.no_grad():
         pred = vae_model.model.decode_from_sample(z)
     return pred
 
 
 def decode_from_sample_autoregressive(vae_model, z):
+    """오토리그레시브 경로에서 사용하는 VAE API로 latent를 복원한다."""
     with torch.no_grad():
         pred = vae_model.decode(z)
     return pred
 
 
 def select_frames(x, T, eval=False, select_timesteps=4, different_history_freq=False):
+    """모델 입력으로 사용할 프레임 인덱스를 선택한다.
+
+    - 학습 시: 더 촘촘한 간격으로 뽑은 뒤, 이후 히스토리/예측 절반 분할을 고려한다.
+    - 평가 시: 균등 간격의 결정적(deterministic) 인덱스를 사용한다.
+    - `different_history_freq` 활성화 시: 사전 계산된 조합에서 히스토리 인덱스를 랜덤 샘플링한다.
+    """
     if eval:
         indices = torch.arange(0, T, step=T // select_timesteps) + select_timesteps - 1
     else:
@@ -159,6 +176,7 @@ def select_frames(x, T, eval=False, select_timesteps=4, different_history_freq=F
 
 
 def normalize_past_action(normalizer, normalizer_type, actions):
+    """과거 액션 히스토리를 설정된 정규화 방식에 맞춰 변환한다."""
     if normalizer_type == "all":
         history_nactions = normalizer["action"].normalize(actions)
     elif normalizer_type == "none":
@@ -167,6 +185,7 @@ def normalize_past_action(normalizer, normalizer_type, actions):
 
 
 def unnormalize_future_action(normalizer, normalizer_type, actions):
+    """모델 출력 액션을 환경 원래 스케일로 되돌린다."""
     if normalizer_type == "all":
         future_nactions = normalizer["action"].unnormalize(actions)
     elif normalizer_type == "none":
@@ -175,6 +194,7 @@ def unnormalize_future_action(normalizer, normalizer_type, actions):
 
 
 def normalize_action(normalizer, normalizer_type, actions):
+    """손실 계산에 사용하는 타깃 액션을 정규화한다."""
     if normalizer_type == "all":
         nactions = normalizer["action"].normalize(actions)
     elif normalizer_type == "none":
@@ -183,6 +203,11 @@ def normalize_action(normalizer, normalizer_type, actions):
 
 
 def normalize_obs(normalizer, normalizer_type, batch):
+    """이미지 외 관측 채널만 in-place 정규화한다.
+
+    이미지 텐서는 여기서 제외한다. 이미지 스케일링은 `process_data`에서
+    [0,255] -> [-1,1] 변환으로 별도 처리되기 때문이다.
+    """
     if normalizer_type == "all":
         nobs = {"obs": {}}
         for k, v in batch["obs"].items():
@@ -204,6 +229,13 @@ def normalize_obs(normalizer, normalizer_type, batch):
 
 
 def process_data(batch, task_name="", eval=False, **kwargs):
+    """원시 배치를 모델 입력 포맷(영상 + 고유수용감각)으로 변환한다.
+
+    Returns:
+        x: 정규화된 이미지 텐서, shape [B, C, T, H, W]
+        proprioception_input: 태스크별 상태/보조 이미지 입력(없으면 None)
+        indices: 시간축 서브샘플링에 사용한 프레임 인덱스
+    """
     train = not eval
 
     x = batch["obs"]["image"]
@@ -222,7 +254,7 @@ def process_data(batch, task_name="", eval=False, **kwargs):
             x, T, eval=eval, different_history_freq=kwargs["different_history_freq"]
         )
 
-    ## normalize image
+    # VAE/MAR 입력 규약: 픽셀값을 [0,255]에서 [-1,1]로 변환한다.
     x = rearrange(x / 127.5 - 1, "b t c h w -> b c t h w")
 
     if kwargs["use_proprioception"]:
@@ -320,21 +352,21 @@ def process_data(batch, task_name="", eval=False, **kwargs):
             if "different_history_freq" in kwargs and kwargs["different_history_freq"]:
                 
                 if indices is not None:
-                    # Each data point in the batch has a different set of indices
+                    # 배치 샘플별 인덱스가 다를 수 있어 행 단위 gather를 사용한다.
                     length = indices.shape[1]  # [bs, 8]
                     if train:
                         length = (
                             length // 2
-                        )  # Only use the first half of the indices for training
+                        )  # 학습에서는 history 구간(앞 절반) 인덱스만 사용
 
-                    # Create index tensors for batched indexing
+                    # 고급 인덱싱 시 배치 정렬이 깨지지 않도록 batch 인덱스를 구성한다.
                     batch_indices = (
                         torch.arange(indices.shape[0], device=indices.device)
                         .unsqueeze(-1)
                         .expand(-1, length)
                     )
 
-                    # Use advanced indexing to directly gather the required elements
+                    # history 빈도 조건에 맞는 시점만 골라낸다.
                     robot0_eef_pos = robot0_eef_pos[batch_indices, indices[:, :length]]
                     robot0_eef_rot_axis_angle = robot0_eef_rot_axis_angle[
                         batch_indices, indices[:, :length]
@@ -366,6 +398,10 @@ def process_data(batch, task_name="", eval=False, **kwargs):
 
 
 def get_trajectory(nactions, T, shift_action, use_history_action=False):
+    """정규화된 액션을 history/future trajectory로 분할한다.
+
+    `shift_action=True`면 관측-액션의 1-step 정렬 오프셋을 반영해 자른다.
+    """
     if nactions is not None:
         if use_history_action:
             if shift_action:
@@ -389,6 +425,7 @@ def get_trajectory(nactions, T, shift_action, use_history_action=False):
 
 
 def extract_latent_autoregressive(vae_model, x):
+    """비디오 텐서를 VAE latent 토큰으로 인코딩하고 고정 스케일을 적용한다."""
     x = x.float()
     B, C, T, H, W = x.size()
     with torch.no_grad():
@@ -400,9 +437,15 @@ def extract_latent_autoregressive(vae_model, x):
 
 
 def get_vae_latent(x, vae_model, eval=False, proprioception_input={}):
+    """오토리그레시브 학습용 조건/타깃 latent 쌍을 만든다.
+
+    시간축 기준으로 입력을 절반 분할한다.
+    - 앞 절반: 조건 latent `c`
+    - 뒤 절반: 예측 대상 latent `z`
+    """
     train = not eval
 
-    c, x = torch.chunk(x, 2, dim=2)  # take the first half as condition
+    c, x = torch.chunk(x, 2, dim=2)  # 시간축 앞 절반을 조건으로 사용
 
     if proprioception_input is not None:
         if "second_image" in proprioception_input:
@@ -427,6 +470,7 @@ def get_vae_latent(x, vae_model, eval=False, proprioception_input={}):
 
 
 def save_image_grid(img, fname, drange, grid_size, normalize=True):
+    """비디오 텐서를 mp4/gif로 저장해 정성적 결과를 빠르게 확인한다."""
     if normalize:
         lo, hi = drange
         img = np.asarray(img, dtype=np.float32)

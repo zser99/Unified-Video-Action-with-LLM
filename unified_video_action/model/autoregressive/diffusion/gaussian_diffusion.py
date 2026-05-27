@@ -512,10 +512,17 @@ class GaussianDiffusion:
         p_sample().
         """
         assert isinstance(shape, (tuple, list))
+        if device is None:
+            if noise is not None:
+                device = noise.device
+            elif model_kwargs is not None and "c" in model_kwargs:
+                device = model_kwargs["c"].device
+            else:
+                device = th.device("cuda" if th.cuda.is_available() else "cpu")
         if noise is not None:
             img = noise
         else:
-            img = th.randn(*shape).cuda()
+            img = th.randn(*shape, device=device)
         indices = list(range(self.num_timesteps))[::-1]
 
         if progress:
@@ -525,7 +532,7 @@ class GaussianDiffusion:
             indices = tqdm(indices)
 
         for i in indices:
-            t = th.tensor([i] * shape[0]).cuda()
+            t = th.tensor([i] * shape[0], device=device)
             with th.no_grad():
                 out = self.p_sample(
                     model,
@@ -682,10 +689,17 @@ class GaussianDiffusion:
         Same usage as p_sample_loop_progressive().
         """
         assert isinstance(shape, (tuple, list))
+        if device is None:
+            if noise is not None:
+                device = noise.device
+            elif model_kwargs is not None and "c" in model_kwargs:
+                device = model_kwargs["c"].device
+            else:
+                device = th.device("cuda" if th.cuda.is_available() else "cpu")
         if noise is not None:
             img = noise
         else:
-            img = th.randn(*shape).cuda()
+            img = th.randn(*shape, device=device)
         indices = list(range(self.num_timesteps))[::-1]
 
         if progress:
@@ -695,7 +709,7 @@ class GaussianDiffusion:
             indices = tqdm(indices)
 
         for i in indices:
-            t = th.tensor([i] * shape[0]).cuda()
+            t = th.tensor([i] * shape[0], device=device)
             with th.no_grad():
                 out = self.ddim_sample(
                     model,

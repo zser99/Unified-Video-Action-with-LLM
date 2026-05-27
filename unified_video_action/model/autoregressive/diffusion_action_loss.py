@@ -42,16 +42,16 @@ class DiffActLoss(nn.Module):
             self.conv = nn.Sequential(
                 nn.Conv2d(z_channels, z_channels, kernel_size=3, stride=1, padding=1),
                 nn.ReLU(),
-                nn.AdaptiveAvgPool2d((4, 4)),  # Reduce to a fixed spatial size of 4x4
+                nn.AdaptiveAvgPool2d((4, 4)),  
             )
-
+# Reduce to a fixed spatial size of 4x4
             # Fully connected layer for action latent prediction
             self.fc = nn.Sequential(
                 nn.Linear(z_channels * 4 * 4, z_channels),
                 nn.ReLU(),
-                nn.Linear(z_channels, z_channels),  # Predict latents for all actions
+                nn.Linear(z_channels, z_channels),  
             )
-
+# Predict latents for all actions
             self.interpolate = nn.Linear(self.num_frames, self.num_actions)
 
             self.refine = nn.Sequential(
@@ -136,7 +136,8 @@ class DiffActLoss(nn.Module):
             
         elif self.act_model_type == 'conv2':
             z = self.conv(z)
-        
+            
+        # 4번째 액트 모델 타입
         elif self.act_model_type == 'fc2':
             z = self.fc(z.transpose(1, 2))
             z = z.transpose(1, 2)
@@ -207,12 +208,16 @@ class DiffActLoss(nn.Module):
 
         # diffusion loss sampling
         if not cfg == 1.0:
-            noise = torch.randn(z.shape[0] // 2, self.in_channels).cuda()
+            noise = torch.randn(
+                z.shape[0] // 2, self.in_channels, device=z.device, dtype=z.dtype
+            )
             noise = torch.cat([noise, noise], dim=0)
             model_kwargs = dict(c=z, cfg_scale=cfg)
             sample_fn = self.net.forward_with_cfg
         else:
-            noise = torch.randn(z.shape[0], self.in_channels).cuda()
+            noise = torch.randn(
+                z.shape[0], self.in_channels, device=z.device, dtype=z.dtype
+            )
             model_kwargs = dict(c=z)
             sample_fn = self.net.forward
 

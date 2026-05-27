@@ -68,12 +68,16 @@ class DiffLoss(nn.Module):
     def sample(self, z, temperature=1.0, cfg=1.0, text_latents=None):
         # diffusion loss sampling
         if not cfg == 1.0:
-            noise = torch.randn(z.shape[0] // 2, self.in_channels).cuda()
+            noise = torch.randn(
+                z.shape[0] // 2, self.in_channels, device=z.device, dtype=z.dtype
+            )
             noise = torch.cat([noise, noise], dim=0)
             model_kwargs = dict(c=z, cfg_scale=cfg)
             sample_fn = self.net.forward_with_cfg
         else:
-            noise = torch.randn(z.shape[0], self.in_channels).cuda()
+            noise = torch.randn(
+                z.shape[0], self.in_channels, device=z.device, dtype=z.dtype
+            )
             model_kwargs = dict(c=z)
             sample_fn = self.net.forward
 

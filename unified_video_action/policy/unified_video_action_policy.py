@@ -45,7 +45,7 @@ class UnifiedVideoActionPolicy(BaseImagePolicy):
         **kwargs
     ):
         super().__init__()
-
+        
         self.task_name = task_name
         self.task_modes = task_modes
         self.autoregressive_model_params = autoregressive_model_params
@@ -361,7 +361,7 @@ class UnifiedVideoActionPolicy(BaseImagePolicy):
 
     def compute_loss(self, batch, **kwargs):
         B, T, C, H, W = batch["obs"]["image"].size()
-
+        
         text_latents = None
         if self.language_emb_model == "clip":
             if "language" in batch["obs"]:
@@ -391,7 +391,7 @@ class UnifiedVideoActionPolicy(BaseImagePolicy):
             normalizer_type=self.normalizer_type,
             batch=batch,
         )
-
+#왜 히스토리 액션 사용하는 설정일때 시퀀스 정렬을 하는거지?
         if self.use_history_action:
             batch = dict_apply(batch, lambda x: x[:, 1:])
 
@@ -415,7 +415,7 @@ class UnifiedVideoActionPolicy(BaseImagePolicy):
             text_latents,
             task_mode=selected_mode,
             proprioception_input=proprioception_input,
-        )
+        )    
 
         ## not recommended, fix the problem in DDM unused parameters
         for param in self.model.parameters():
