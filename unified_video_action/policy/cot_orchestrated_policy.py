@@ -37,6 +37,7 @@ class CoTOrchestratedPolicy(BaseImagePolicy):
 
         self._step_index = 0
         self._replan_index = 0
+        self._last_replan_step = 0
         self._current_plan = None
         self._base_goal: str = ""
         self.last_cot_trace: str = ""
@@ -45,6 +46,7 @@ class CoTOrchestratedPolicy(BaseImagePolicy):
         self.inner.reset()
         self._step_index = 0
         self._replan_index = 0
+        self._last_replan_step = 0
         self._current_plan = None
         self._base_goal = ""
         self.last_cot_trace = ""
@@ -60,7 +62,7 @@ class CoTOrchestratedPolicy(BaseImagePolicy):
     def _needs_replan(self) -> bool:
         if self._current_plan is None:
             return True
-        return self._step_index > 0 and self._step_index % self.replan_every == 0
+        return (self._step_index - self._last_replan_step) >= self.replan_every
 
     def predict_action(
         self,
@@ -82,6 +84,7 @@ class CoTOrchestratedPolicy(BaseImagePolicy):
             )
             self._current_plan = plan
             self.last_cot_trace = plan.cot_trace
+            self._last_replan_step = self._step_index
             self._replan_index += 1
             if self.verbose:
                 print("[CoT] replan ->", plan.language_goal)
