@@ -1,10 +1,14 @@
 from typing import Optional, Union
 
-from diffusers.optimization import (
-    SchedulerType,
-    Optimizer,
-    TYPE_TO_SCHEDULER_FUNCTION,
-)
+try:
+    from diffusers.optimization import (
+        SchedulerType,
+        Optimizer,
+        TYPE_TO_SCHEDULER_FUNCTION,
+    )
+except ImportError:
+    from transformers.optimization import SchedulerType, TYPE_TO_SCHEDULER_FUNCTION
+    from torch.optim import Optimizer
 
 
 def get_scheduler(
