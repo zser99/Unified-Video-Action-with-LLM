@@ -28,6 +28,7 @@ import math
 import dill
 import wandb.sdk.data_types.video as wv
 from unified_video_action.gym_util.async_vector_env import AsyncVectorEnv
+from unified_video_action.gym_util.sync_vector_env import SyncVectorEnv
 from unified_video_action.gym_util.multistep_wrapper import MultiStepWrapper
 from unified_video_action.gym_util.video_recording_wrapper import (
     VideoRecordingWrapper,
@@ -168,11 +169,6 @@ class LiberoImageRunner(BaseImageRunner):
             rotation_transformer = RotationTransformer("axis_angle", "rotation_6d")
 
         def env_fn():
-            # Worker processes inherit MUJOCO_GL=egl from the Jupyter kernel but EGL
-            # frequently crashes in spawned subprocesses. Force osmesa (CPU renderer)
-            # which is reliable regardless of how the worker was started.
-            os.environ["MUJOCO_GL"] = "osmesa"
-            os.environ["PYOPENGL_PLATFORM"] = "osmesa"
             libero_env = create_env(env_meta=env_meta, shape_meta=shape_meta)
             libero_env.env.hard_reset = False
             return MultiStepWrapper(
@@ -298,17 +294,18 @@ class LiberoImageRunner(BaseImageRunner):
             env_prefixs.append("test/%s_" % env_meta["bddl_file"].split("/")[-1][:-5])
             env_init_fn_dills.append(dill.dumps(init_fn))
 
-        # Colab/Jupyter: fork in a multi-threaded process (Jupyter kernel) can deadlock.
-        # forkserver pre-forks a clean single-threaded server before any threads exist,
-        # so workers are forked from it — no deadlock risk.
-        # spawn also uses fork+exec internally on Linux and hits the same issue.
-        _mp_context = "forkserver" if os.path.isdir("/content") else None
-        env = AsyncVectorEnv(
-            env_fns,
-            dummy_env_fn=dummy_env_fn,
-            shared_memory=False,
-            context=_mp_context,
-        )
+        # Colab/Jupyter: any form of subprocess forking from a multi-threaded Jupyter
+        # kernel risks deadlock or segfault (fork, spawn, forkserver all ultimately
+        # call os.fork() somewhere in the multi-threaded parent). Run envs in-process
+        # with SyncVectorEnv to avoid all multiprocessing issues entirely.
+        if os.path.isdir("/content"):
+            env = SyncVectorEnv(env_fns)
+        else:
+            env = AsyncVectorEnv(
+                env_fns,
+                dummy_env_fn=dummy_env_fn,
+                shared_memory=False,
+            )
 
         self.env_meta = env_meta
         self.env = env
