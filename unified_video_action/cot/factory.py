@@ -11,6 +11,7 @@ def create_planner(name: str, **kwargs: Any) -> CoTPlanner:
     name = name.lower().strip()
     if name in ("rule", "rule_based", "rules"):
         kwargs.pop("model", None)
+        kwargs.pop("fallback_rule_based", None)
         return RuleBasedCoTPlanner(**kwargs)
     if name in ("llm", "openai", "gpt"):
         from unified_video_action.cot.llm_planner import LLMCoTPlanner
