@@ -169,6 +169,11 @@ class LiberoImageRunner(BaseImageRunner):
             rotation_transformer = RotationTransformer("axis_angle", "rotation_6d")
 
         def env_fn():
+            # EGL on Colab (and in subprocesses) can fork GPU driver daemons that
+            # later die, causing ConnectionResetError. osmesa is CPU-based with no
+            # subprocess and is always reliable for headless rendering.
+            os.environ["MUJOCO_GL"] = "osmesa"
+            os.environ["PYOPENGL_PLATFORM"] = "osmesa"
             libero_env = create_env(env_meta=env_meta, shape_meta=shape_meta)
             libero_env.env.hard_reset = False
             return MultiStepWrapper(
