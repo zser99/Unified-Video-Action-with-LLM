@@ -298,8 +298,11 @@ class LiberoImageRunner(BaseImageRunner):
             env_prefixs.append("test/%s_" % env_meta["bddl_file"].split("/")[-1][:-5])
             env_init_fn_dills.append(dill.dumps(init_fn))
 
-        # Colab/Jupyter: fork + threaded parent often kills MuJoCo workers (ConnectionResetError).
-        _mp_context = "spawn" if os.path.isdir("/content") else None
+        # Colab/Jupyter: fork in a multi-threaded process (Jupyter kernel) can deadlock.
+        # forkserver pre-forks a clean single-threaded server before any threads exist,
+        # so workers are forked from it — no deadlock risk.
+        # spawn also uses fork+exec internally on Linux and hits the same issue.
+        _mp_context = "forkserver" if os.path.isdir("/content") else None
         env = AsyncVectorEnv(
             env_fns,
             dummy_env_fn=dummy_env_fn,
