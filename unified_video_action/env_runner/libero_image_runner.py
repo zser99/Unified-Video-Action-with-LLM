@@ -1,6 +1,10 @@
 import os
 import sys
 
+# Headless rendering for Colab/server — must be set before any GL import
+os.environ.setdefault("MUJOCO_GL", "egl")
+os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+
 # mujoco_py shim — must run before any robomimic/LIBERO imports
 try:
     import mujoco_py  # noqa: F401
