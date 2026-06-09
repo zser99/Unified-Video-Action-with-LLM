@@ -1,5 +1,17 @@
 import os
 import sys
+
+# mujoco_py shim — must run before any robomimic/LIBERO imports
+try:
+    import mujoco_py  # noqa: F401
+except ImportError:
+    try:
+        import mujoco as _m
+        sys.modules["mujoco_py"] = _m
+        del _m
+    except ImportError:
+        pass
+
 import wandb
 import numpy as np
 import torch
