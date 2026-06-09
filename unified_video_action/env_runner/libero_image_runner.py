@@ -85,6 +85,13 @@ from libero.libero.envs.bddl_base_domain import TASK_MAPPING
 
 
 def create_env(env_meta, shape_meta, enable_render=True):
+    # Re-run registration in spawn workers (cloudpickle skips module-level init)
+    _ensure_libero_on_path()
+    try:
+        from libero.libero.envs.bddl_base_domain import TASK_MAPPING  # noqa: F401
+    except ImportError:
+        pass
+
     modality_mapping = collections.defaultdict(list)
     for key, attr in shape_meta["obs"].items():
         modality_mapping[attr.get("type", "low_dim")].append(key)
