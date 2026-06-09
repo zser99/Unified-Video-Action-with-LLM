@@ -2,8 +2,9 @@ import os
 import sys
 
 # Headless rendering for Colab/server — must be set before any GL import
-os.environ.setdefault("MUJOCO_GL", "egl")
-os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+# osmesa = CPU software rendering, works in any container without /dev/dri
+os.environ.setdefault("MUJOCO_GL", "osmesa")
+os.environ.setdefault("PYOPENGL_PLATFORM", "osmesa")
 
 # mujoco_py shim — must run before any robomimic/LIBERO imports
 try:

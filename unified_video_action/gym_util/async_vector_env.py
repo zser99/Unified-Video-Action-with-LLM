@@ -558,7 +558,12 @@ class AsyncVectorEnv(VectorEnv):
 
 def _worker(index, env_fn, pipe, parent_pipe, shared_memory, error_queue):
     assert shared_memory is None
-    env = env_fn()
+    try:
+        env = env_fn()
+    except Exception:
+        error_queue.put((index,) + sys.exc_info()[:2])
+        pipe.send((None, False))
+        return
     parent_pipe.close()
     try:
         while True:
@@ -611,7 +616,12 @@ def _worker(index, env_fn, pipe, parent_pipe, shared_memory, error_queue):
 
 def _worker_shared_memory(index, env_fn, pipe, parent_pipe, shared_memory, error_queue):
     assert shared_memory is not None
-    env = env_fn()
+    try:
+        env = env_fn()
+    except Exception:
+        error_queue.put((index,) + sys.exc_info()[:2])
+        pipe.send((None, False))
+        return
     observation_space = env.observation_space
     parent_pipe.close()
     try:
