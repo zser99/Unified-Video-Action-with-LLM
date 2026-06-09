@@ -168,6 +168,11 @@ class LiberoImageRunner(BaseImageRunner):
             rotation_transformer = RotationTransformer("axis_angle", "rotation_6d")
 
         def env_fn():
+            # Worker processes inherit MUJOCO_GL=egl from the Jupyter kernel but EGL
+            # frequently crashes in spawned subprocesses. Force osmesa (CPU renderer)
+            # which is reliable regardless of how the worker was started.
+            os.environ["MUJOCO_GL"] = "osmesa"
+            os.environ["PYOPENGL_PLATFORM"] = "osmesa"
             libero_env = create_env(env_meta=env_meta, shape_meta=shape_meta)
             libero_env.env.hard_reset = False
             return MultiStepWrapper(
