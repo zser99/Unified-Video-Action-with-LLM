@@ -1,5 +1,6 @@
 hostfile
 debug*/
+.claude/
 checkpoints/
 vis*/
 *.npz

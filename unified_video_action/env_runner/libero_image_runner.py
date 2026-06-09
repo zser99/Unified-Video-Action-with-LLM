@@ -1,8 +1,7 @@
 import os
 import sys
 
-# Headless rendering for Colab/server — must be set before any GL import
-# osmesa = CPU software rendering, works in any container without /dev/dri
+# osmesa = CPU software rendering, no /dev/dri required (Colab/server safe)
 os.environ.setdefault("MUJOCO_GL", "osmesa")
 os.environ.setdefault("PYOPENGL_PLATFORM", "osmesa")
 
@@ -39,7 +38,6 @@ from unified_video_action.policy.base_image_policy import BaseImagePolicy
 from unified_video_action.common.pytorch_util import dict_apply
 from unified_video_action.env_runner.base_image_runner import BaseImageRunner
 
-## here we just use the same env wrapper as robomimic
 from unified_video_action.env.robomimic.robomimic_image_wrapper import (
     RobomimicImageWrapper,
 )
@@ -48,18 +46,6 @@ from unified_video_action.env_runner.libero_bddl_mapping import bddl_file_name_d
 import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.obs_utils as ObsUtils
-
-
-def _mujoco_py_shim():
-    """Colab Py3.12 + mujoco 3.x: LIBERO/robomimic may still import mujoco_py."""
-    try:
-        import mujoco_py  # noqa: F401
-        return
-    except ImportError:
-        pass
-    import mujoco
-
-    sys.modules["mujoco_py"] = mujoco
 
 
 def _ensure_libero_on_path():
@@ -81,7 +67,6 @@ def _ensure_libero_on_path():
     )
 
 
-_mujoco_py_shim()
 _ensure_libero_on_path()
 from libero.libero.envs.bddl_base_domain import TASK_MAPPING
 
@@ -101,15 +86,8 @@ def create_env(env_meta, shape_meta, enable_render=True):
     ObsUtils.initialize_obs_modality_mapping_from_dict(modality_mapping)
 
     if env_meta["bddl_file"] not in bddl_file_name_dict.values():
-        print("convert bddl filename")
-        print(env_meta["bddl_file"])
-        print(env_meta["env_kwargs"]["bddl_file_name"])
         env_meta["bddl_file"] = bddl_file_name_dict[env_meta["bddl_file"]]
         env_meta["env_kwargs"]["bddl_file_name"] = env_meta["bddl_file"]
-    else:
-        print("use existing bddl file")
-        print(env_meta["bddl_file"])
-        print(env_meta["env_kwargs"]["bddl_file_name"])
 
     env = EnvUtils.create_env_from_metadata(
         env_meta=env_meta,
