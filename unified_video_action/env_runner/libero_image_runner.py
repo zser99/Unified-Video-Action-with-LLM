@@ -72,8 +72,9 @@ def _ensure_libero_on_path():
         os.path.abspath(os.path.join(os.getcwd(), "..", "LIBERO")),
     ]
     for path in candidates:
-        if path and os.path.isdir(path) and path not in sys.path:
-            sys.path.insert(0, path)
+        if path and os.path.isdir(path):
+            if path not in sys.path:
+                sys.path.insert(0, path)
             return path
     raise ImportError(
         "LIBERO repo not found. Clone to /content/LIBERO or set LIBERO_PATH."
