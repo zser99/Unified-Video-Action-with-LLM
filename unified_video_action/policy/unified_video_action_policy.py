@@ -31,6 +31,8 @@ from unified_video_action.utils.language_model import (
 
 
 class UnifiedVideoActionPolicy(BaseImagePolicy):
+    _diag_call_count = 0  # global counter; reset to 0 to re-enable diagnostics
+
     def __init__(
         self,
         vae_model_params,
@@ -229,6 +231,15 @@ class UnifiedVideoActionPolicy(BaseImagePolicy):
         obs_dict = resize_image_eval(self.task_name, obs_dict)
         B, T, C, H, W = obs_dict["image"].shape
 
+        # ── inference diagnostics (first 2 calls only) ───────────────────────
+        UnifiedVideoActionPolicy._diag_call_count += 1
+        _diag = UnifiedVideoActionPolicy._diag_call_count <= 2
+        if _diag:
+            img = obs_dict["image"]
+            print(f"[DIAG#{UnifiedVideoActionPolicy._diag_call_count}] image shape={tuple(img.shape)} "
+                  f"dtype={img.dtype} min={img.min():.4f} max={img.max():.4f} mean={img.mean():.4f}")
+        # ──────────────────────────────────────────────────────────────────────
+
         ## language goal
         text_latents = None
         if self.language_emb_model is not None:
@@ -304,12 +315,21 @@ class UnifiedVideoActionPolicy(BaseImagePolicy):
 
         naction_pred = act_out[..., :Da]
 
+        if _diag:
+            print(f"[DIAG#{UnifiedVideoActionPolicy._diag_call_count}] naction_pred (normalized) "
+                  f"shape={tuple(naction_pred.shape)} min={naction_pred.min():.4f} max={naction_pred.max():.4f}")
+
         ## unnormalize action
         action_pred = unnormalize_future_action(
             normalizer=self.normalizer,
             normalizer_type=self.normalizer_type,
             actions=naction_pred,
         )
+
+        if _diag:
+            print(f"[DIAG#{UnifiedVideoActionPolicy._diag_call_count}] action_pred (unnorm) "
+                  f"shape={tuple(action_pred.shape)} min={action_pred.min():.4f} max={action_pred.max():.4f} "
+                  f"mean={action_pred.mean():.4f}")
 
         action = action_pred[:, : self.n_action_steps]
 
