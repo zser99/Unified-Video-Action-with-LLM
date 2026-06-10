@@ -435,6 +435,7 @@ class LiberoImageRunner(BaseImageRunner):
             max_reward = np.max(all_rewards[i])
             max_rewards[prefix].append(max_reward)
             log_data[prefix + f"sim_max_reward_{seed}"] = max_reward
+            print(f"  ep {i+1}: {'SUCCESS' if max_reward >= 1.0 else 'FAIL'} (seed={seed}, max_reward={max_reward:.2f})")
 
             # visualize sim
             video_path = all_video_paths[i]
